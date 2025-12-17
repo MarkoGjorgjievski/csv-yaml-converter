@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV to YAML Converter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .file-input-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+
+        .file-display {
+            flex: 1;
+            padding: 12px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            color: #666;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            min-height: 44px;
+        }
+
+        .file-display.active {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-color: #4caf50;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+            flex: 1;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-success {
+            background: #4caf50;
+            color: white;
+            width: 100%;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+        }
+
+        .btn-success:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .output-section {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid #eee;
+        }
+
+        .output-section.hidden {
+            display: none;
+        }
+
+        .preview {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #333;
+            margin-bottom: 15px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ef5350;
+            display: block;
+        }
+
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #4caf50;
+            display: block;
+        }
+
+        .row-count {
+            color: #666;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>📊 CSV to YAML</h1>
+        <p class="subtitle">Convert your CSV files to YAML format instantly</p>
+
+        <div class="form-group">
+            <label for="fileInput">Select CSV File</label>
+            <div class="file-input-wrapper">
+                <div class="file-display" id="fileDisplay">No file selected</div>
+                <button class="btn-primary" onclick="pickFile()">Browse</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="outputName">Output Filename</label>
+            <input type="text" id="outputName" value="inputs.yaml"
+                style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+        </div>
+
+        <button class="btn-success" onclick="convertFile()" id="convertBtn" disabled>Convert to YAML</button>
+
+        <div class="output-section hidden" id="outputSection">
+            <div class="status" id="status"></div>
+            <label>Preview (first 20 entries)</label>
+            <div class="preview" id="preview"></div>
+            <div class="row-count" id="rowCount"></div>
+            <button class="btn-success" onclick="downloadYaml()" style="background: #764ba2;">📥 Download YAML</button>
+        </div>
+    </div>
+
+    <script>
+        let csvData = null;
+        let yamlContent = null;
+
+        async function pickFile() {
+            try {
+                const [fileHandle] = await window.showOpenFilePicker({
+                    types: [
+                        {
+                            description: 'CSV Files',
+                            accept: { 'text/csv': ['.csv'] }
+                        }
+                    ]
+                });
+
+                const file = await fileHandle.getFile();
+                csvData = await file.text();
+
+                const fileDisplay = document.getElementById('fileDisplay');
+                fileDisplay.textContent = file.name;
+                fileDisplay.classList.add('active');
+                document.getElementById('convertBtn').disabled = false;
+            } catch (err) {
+                console.error('File picker error:', err);
+            }
+        }
+
+        function parseCSV(csv) {
+            const lines = csv.trim().split('\n');
+            if (lines.length === 0) return [];
+
+            const headers = lines[0].split(',').map(h => h.trim());
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim());
+                const obj = {};
+                headers.forEach((header, idx) => {
+                    obj[header] = values[idx] || '';
+                });
+                data.push(obj);
+            }
+
+            return data;
+        }
+
+        function formatInputsAsYaml(data) {
+            if (!Array.isArray(data)) throw new TypeError('expected an array');
+
+            return data.map((item, i) => {
+                const url = item && item.url ? item.url : '';
+                return `input${i}:\n  url: ${url}`;
+            }).join('\n');
+        }
+
+        function convertFile() {
+            const status = document.getElementById('status');
+            status.classList.remove('error', 'success');
+
+            try {
+                const parsedData = parseCSV(csvData);
+
+                if (parsedData.length === 0) {
+                    status.textContent = 'Error: No data found in CSV file.';
+                    status.classList.add('error');
+                    return;
+                }
+
+                yamlContent = formatInputsAsYaml(parsedData);
+
+                // Show preview (first 20 entries)
+                const previewLines = yamlContent.split('\n').slice(0, 40).join('\n');
+                document.getElementById('preview').textContent = previewLines + (yamlContent.split('\n').length > 40 ? '\n...' : '');
+                document.getElementById('rowCount').textContent = `Total entries: ${parsedData.length}`;
+
+                document.getElementById('outputSection').classList.remove('hidden');
+                status.textContent = `✓ Successfully converted ${parsedData.length} rows!`;
+                status.classList.add('success');
+            } catch (err) {
+                status.textContent = `Error: ${err.message}`;
+                status.classList.add('error');
+            }
+        }
+
+        function downloadYaml() {
+            if (!yamlContent) return;
+
+            const outputName = document.getElementById('outputName').value || 'inputs.yaml';
+            const element = document.createElement('a');
+            element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(yamlContent));
+            element.setAttribute('download', outputName);
+            element.style.display = 'none';
+            document.body.appendChild(element);
+            element.click();
+            document.body.removeChild(element);
+        }
+    </script>
+</body>
+
+</html>

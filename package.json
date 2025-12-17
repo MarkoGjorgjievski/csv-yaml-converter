@@ -1,0 +1,21 @@
+{
+  "name": "csv-to-yaml-converter",
+  "version": "1.0.0",
+  "description": "Convert CSV files to YAML format with a web UI or CLI",
+  "main": "convert.js",
+  "scripts": {
+    "start": "node convert.js"
+  },
+  "keywords": [
+    "csv",
+    "yaml",
+    "converter",
+    "cli",
+    "web"
+  ],
+  "author": "Marko Gjorgjievski",
+  "license": "MIT",
+  "dependencies": {
+    "csv-parser": "^3.2.0"
+  }
+}
