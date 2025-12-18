@@ -177,6 +177,120 @@
             font-size: 12px;
             margin-top: 10px;
         }
+
+        .keys-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 6px;
+        }
+
+        .keys-section.hidden {
+            display: none;
+        }
+
+        .keys-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            margin-top: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .key-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .key-checkbox input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+
+        .key-checkbox label {
+            margin: 0;
+            font-weight: 400;
+            font-size: 14px;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .key-controls {
+            margin-top: 12px;
+            display: flex;
+            gap: 10px;
+            font-size: 12px;
+        }
+
+        .key-controls button {
+            padding: 8px 12px;
+            font-size: 12px;
+            background: #667eea;
+            color: white;
+        }
+
+        .key-controls button:hover {
+            background: #5568d3;
+        }
+
+        details {
+            margin-top: 30px;
+        }
+
+        summary {
+            cursor: pointer;
+            font-weight: 600;
+            padding: 12px;
+            background: #f0f0f0;
+            border-radius: 6px;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        summary:hover {
+            background: #e5e5e5;
+        }
+
+        .customize-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 6px;
+        }
+
+        .row-range-group {
+            margin-top: 20px;
+        }
+
+        .row-range-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .row-range-inputs {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .row-range-inputs input[type="range"] {
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .row-range-inputs input[type="number"] {
+            width: 80px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
     </style>
 </head>
 
@@ -201,18 +315,45 @@
 
         <button class="btn-success" onclick="convertFile()" id="convertBtn" disabled>Convert to YAML</button>
 
+        <details id="customizeDetails">
+            <summary>⚙️ Customize output</summary>
+
+            <div class="customize-section">
+                <div class="keys-section" id="keysSection">
+                    <label style="display: block; font-weight: 600; margin-bottom: 10px;">Select Keys to Include</label>
+                    <div class="keys-list" id="keysList"></div>
+                    <div class="key-controls">
+                        <button onclick="selectAllKeys()">Select All</button>
+                        <button onclick="deselectAllKeys()">Deselect All</button>
+                    </div>
+                </div>
+
+                <div class="row-range-group">
+                    <label for="rowRange">Number of Rows to Download</label>
+                    <div class="row-range-inputs">
+                        <input type="range" id="rowRange" min="1" max="100" value="100">
+                        <input type="number" id="rowNumber" min="1" max="100" value="100">
+                    </div>
+                </div>
+            </div>
+        </details>
+
         <div class="output-section hidden" id="outputSection">
             <div class="status" id="status"></div>
             <label>Preview (first 20 entries)</label>
             <div class="preview" id="preview"></div>
             <div class="row-count" id="rowCount"></div>
-            <button class="btn-success" onclick="downloadYaml()" style="background: #764ba2;">📥 Download YAML</button>
+            <button class="btn-success" id="downloadBtn" onclick="downloadYaml()" style="background: #764ba2;">📥
+                Download YAML</button>
         </div>
     </div>
 
     <script>
         let csvData = null;
         let yamlContent = null;
+        let parsedData = null;
+        let availableKeys = [];
+        let maxRows = 0;
 
         async function pickFile() {
             try {
@@ -256,13 +397,77 @@
             return data;
         }
 
-        function formatInputsAsYaml(data) {
+        function getAllKeys(data) {
+            const keysSet = new Set();
+            data.forEach(item => {
+                Object.keys(item).forEach(key => keysSet.add(key));
+            });
+            return Array.from(keysSet);
+        }
+
+        function formatInputsAsYaml(data, selectedKeys, rowLimit) {
             if (!Array.isArray(data)) throw new TypeError('expected an array');
 
-            return data.map((item, i) => {
-                const url = item && item.url ? item.url : '';
-                return `input${i}:\n  url: ${url}`;
+            const limitedData = data.slice(0, rowLimit);
+
+            return limitedData.map((item, i) => {
+                let yaml = `input${i}:`;
+                selectedKeys.forEach(key => {
+                    let value = item && item[key] ? String(item[key]).trim() : '';
+                    // Remove leading quote if exists
+                    if (value.startsWith('"') || value.startsWith("'")) {
+                        value = value.slice(1);
+                    }
+                    // Remove trailing quote if exists
+                    if (value.endsWith('"') || value.endsWith("'")) {
+                        value = value.slice(0, -1);
+                    }
+                    // Escape backslashes first, then escape quotes
+                    value = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                    // Properly quote YAML string values
+                    const quotedValue = `"${value}"`;
+                    yaml += `\n  ${key}: ${quotedValue}`;
+                });
+                return yaml;
             }).join('\n');
+        }
+
+        function renderKeyCheckboxes() {
+            const keysList = document.getElementById('keysList');
+            keysList.innerHTML = '';
+
+            availableKeys.forEach(key => {
+                const checkbox = document.createElement('div');
+                checkbox.className = 'key-checkbox';
+                checkbox.innerHTML = `
+                    <input type="checkbox" id="key-${key}" value="${key}" checked>
+                    <label for="key-${key}">${key}</label>
+                `;
+                keysList.appendChild(checkbox);
+            });
+        }
+
+        function getSelectedKeys() {
+            const checkboxes = document.querySelectorAll('#keysList input[type="checkbox"]');
+            return Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+        }
+
+        function selectAllKeys() {
+            document.querySelectorAll('#keysList input[type="checkbox"]').forEach(cb => cb.checked = true);
+            generateYaml();
+        }
+
+        function deselectAllKeys() {
+            document.querySelectorAll('#keysList input[type="checkbox"]').forEach(cb => cb.checked = false);
+            generateYaml();
+        }
+
+        function syncRowInputs(value) {
+            document.getElementById('rowRange').value = value;
+            document.getElementById('rowNumber').value = value;
+            generateYaml();
         }
 
         function convertFile() {
@@ -270,7 +475,7 @@
             status.classList.remove('error', 'success');
 
             try {
-                const parsedData = parseCSV(csvData);
+                parsedData = parseCSV(csvData);
 
                 if (parsedData.length === 0) {
                     status.textContent = 'Error: No data found in CSV file.';
@@ -278,20 +483,53 @@
                     return;
                 }
 
-                yamlContent = formatInputsAsYaml(parsedData);
+                maxRows = parsedData.length;
+                availableKeys = getAllKeys(parsedData);
+                renderKeyCheckboxes();
 
-                // Show preview (first 20 entries)
-                const previewLines = yamlContent.split('\n').slice(0, 40).join('\n');
-                document.getElementById('preview').textContent = previewLines + (yamlContent.split('\n').length > 40 ? '\n...' : '');
-                document.getElementById('rowCount').textContent = `Total entries: ${parsedData.length}`;
+                // Update row range limits
+                document.getElementById('rowRange').max = maxRows;
+                document.getElementById('rowRange').value = maxRows;
+                document.getElementById('rowNumber').max = maxRows;
+                document.getElementById('rowNumber').value = maxRows;
 
-                document.getElementById('outputSection').classList.remove('hidden');
-                status.textContent = `✓ Successfully converted ${parsedData.length} rows!`;
-                status.classList.add('success');
+                // Show customize section
+                document.getElementById('customizeDetails').open = true;
+
+                // Generate initial preview with all keys and all rows
+                generateYaml();
             } catch (err) {
                 status.textContent = `Error: ${err.message}`;
                 status.classList.add('error');
             }
+        }
+
+        function generateYaml() {
+            const selectedKeys = getSelectedKeys();
+            const status = document.getElementById('status');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const rowLimit = parseInt(document.getElementById('rowRange').value);
+
+            if (selectedKeys.length === 0) {
+                status.textContent = 'Error: Please select at least one key.';
+                status.classList.remove('success');
+                status.classList.add('error');
+                downloadBtn.disabled = true;
+                return;
+            }
+
+            yamlContent = formatInputsAsYaml(parsedData, selectedKeys, rowLimit);
+
+            // Show preview (first 20 entries)
+            const previewLines = yamlContent.split('\n').slice(0, 40).join('\n');
+            document.getElementById('preview').textContent = previewLines + (yamlContent.split('\n').length > 40 ? '\n...' : '');
+            document.getElementById('rowCount').textContent = `Rows: ${rowLimit} / ${parsedData.length} | Keys: ${selectedKeys.join(', ')}`;
+
+            document.getElementById('outputSection').classList.remove('hidden');
+            status.textContent = `✓ Ready to download ${rowLimit} row(s) with ${selectedKeys.length} key(s).`;
+            status.classList.remove('error');
+            status.classList.add('success');
+            downloadBtn.disabled = false;
         }
 
         function downloadYaml() {
@@ -306,6 +544,26 @@
             element.click();
             document.body.removeChild(element);
         }
+
+        // Bind range and number inputs
+        document.addEventListener('DOMContentLoaded', () => {
+            const rowRange = document.getElementById('rowRange');
+            const rowNumber = document.getElementById('rowNumber');
+
+            rowRange.addEventListener('input', (e) => {
+                syncRowInputs(e.target.value);
+            });
+
+            rowNumber.addEventListener('input', (e) => {
+                syncRowInputs(e.target.value);
+            });
+
+            document.addEventListener('change', (e) => {
+                if (e.target.type === 'checkbox' && e.target.id.startsWith('key-')) {
+                    generateYaml();
+                }
+            });
+        });
     </script>
 </body>
 
